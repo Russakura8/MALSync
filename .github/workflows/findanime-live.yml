@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 80b5a35
+          ref: 80b5a35fc89f6c1cf7b407c51203aa9df1204326
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.x'
@@ -28,11 +28,12 @@ jobs:
         working-directory: test/dist/headless
       - run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
       - name: Original FindAnime test
+        id: original
         run: node test/headless/test.js FindAnime
         env:
           CI: true
       - name: Diagnostic retry with browser logs
-        if: failure()
+        if: failure() && steps.original.outcome == 'failure'
         run: |
           node <<'NODE'
           const fs = require('fs');
