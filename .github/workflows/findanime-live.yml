@@ -1,0 +1,50 @@
+name: FindAnime live diagnostic
+on:
+  push:
+    branches: [ci/findanime-live-check]
+permissions:
+  contents: read
+jobs:
+  live-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 80b5a35
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.x'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:webextension
+      - run: npx webpack --config webpackConfig/test.config.js
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: MALSync/test_data
+          ref: master
+          path: test/dist/headless
+      - run: node decrypt.js
+        working-directory: test/dist/headless
+      - run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+      - name: Original FindAnime test
+        run: node test/headless/test.js FindAnime
+        env:
+          CI: true
+      - name: Diagnostic retry with browser logs
+        if: failure()
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = 'test/headless/browser.js';
+          let text = fs.readFileSync(file, 'utf8');
+          text = text.replace('const page = await b.newPage();', `const page = await b.newPage();
+            page.on('console', msg => console.log('[browser]', msg.type(), msg.text()));
+            page.on('pageerror', err => console.log('[pageerror]', err.stack));
+            page.on('domcontentloaded', () => console.log('[domready]', page.url()));
+          `);
+          fs.writeFileSync(file, text);
+          NODE
+          node test/headless/test.js FindAnime
+        env:
+          CI: true
